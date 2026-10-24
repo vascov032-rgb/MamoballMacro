@@ -1,0 +1,51 @@
+name: Build Zygisk Module
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'zulu'
+        java-version: '17'
+        
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      
+    - name: Setup NDK
+      uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: r25c
+        
+    - name: Compile Java to DEX
+      run: |
+        mkdir -p build
+        javac -classpath $ANDROID_HOME/platforms/android-33/android.jar -d build src/com/flork/macro/FlorkOverlay.java
+        $ANDROID_HOME/build-tools/33.0.2/d8 --output build build/com/flork/macro/*.class
+        mv build/classes.dex zygisk/overlay.dex
+        
+    - name: Compile C++ (Zygisk)
+      run: |
+        $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
+          -shared -fPIC -o zygisk/arm64-v8a.so zygisk/jni.cpp -I zygisk -llog -ldl -std=c++17
+        
+    - name: Package ZIP
+      run: |
+        mkdir -p zip_out/zygisk
+        cp module.prop zip_out/
+        cp zygisk/arm64-v8a.so zip_out/zygisk/
+        cp zygisk/overlay.dex zip_out/zygisk/
+        cp libflork_android.so zip_out/zygisk/
+        # AQUI ESTÁ A MÁGICA: Copia a libc++ do NDK pro pacote
+        cp $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so zip_out/zygisk/
+        cd zip_out && zip -r ../mamoball_macro.zip *
+        
+    - name: Upload ZIP
+      uses: actions/upload-artifact@v4
+      with:
+        name: Mamoball-Macro-ZIP
+        path: mamoball_macro.zip
