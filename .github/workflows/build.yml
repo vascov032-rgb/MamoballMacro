@@ -13,9 +13,8 @@ jobs:
         distribution: 'zulu'
         java-version: '17'
         
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      
+    # REMOVIDO O SETUP-ANDROID QUE ESTAVA DANDO ERRO
+        
     - name: Setup NDK
       uses: nttld/setup-ndk@v1
       with:
@@ -24,8 +23,14 @@ jobs:
     - name: Compile Java to DEX
       run: |
         mkdir -p build
-        javac -classpath $ANDROID_HOME/platforms/android-33/android.jar -d build src/com/flork/macro/FlorkOverlay.java
-        $ANDROID_HOME/build-tools/33.0.2/d8 --output build build/com/flork/macro/*.class
+        # O GitHub já tem o android.jar, a gente só acha ele
+        ANDROID_JAR=$(find /usr/local/lib/android/sdk/platforms -name android.jar | head -n 1)
+        echo "Usando android.jar em: $ANDROID_JAR"
+        javac -classpath $ANDROID_JAR -d build src/com/flork/macro/FlorkOverlay.java
+        
+        # Acha o compilador D8
+        D8_PATH=$(find /usr/local/lib/android/sdk/build-tools -name d8 | head -n 1)
+        $D8_PATH --output build build/com/flork/macro/*.class
         mv build/classes.dex zygisk/overlay.dex
         
     - name: Compile C++ (Zygisk)
@@ -39,8 +44,7 @@ jobs:
         cp module.prop zip_out/
         cp zygisk/arm64-v8a.so zip_out/zygisk/
         cp zygisk/overlay.dex zip_out/zygisk/
-        cp libflork_android.so zip_out/zygisk/
-        # AQUI ESTÁ A MÁGICA: Copia a libc++ do NDK pro pacote
+        cp zygisk/libflork_android.so zip_out/zygisk/
         cp $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so zip_out/zygisk/
         cd zip_out && zip -r ../mamoball_macro.zip *
         
